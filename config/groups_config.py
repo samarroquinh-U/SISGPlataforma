@@ -10,6 +10,12 @@ GROUPS = {
         "view": "vw_g1_fact_atencion_privada",
         "inbox": "ingesta_g1_atencion",
         "read_only": False,
+        "catalogs": ("tiempo", "establecimiento", "geografia", "diagnostico", "servicio"),
+        "metric": "atenciones",
+        "metric_label": "Atenciones",
+        "category": "Establecimiento",
+        "money_candidates": ("monto_cobrado", "costo_promedio"),
+        "days_candidates": ("dias_estancia", "dias_hospitalizacion"),
     },
     2: {
         "name": "Red pública",
@@ -20,6 +26,12 @@ GROUPS = {
         "view": "vw_g2_fact_morbilidad",
         "inbox": "ingesta_g2_morbilidad",
         "read_only": False,
+        "catalogs": ("tiempo", "geografia", "diagnostico", "demografia"),
+        "metric": "casos",
+        "metric_label": "Casos",
+        "category": "Diagnóstico CIE-10",
+        "money_candidates": (),
+        "days_candidates": (),
     },
     3: {
         "name": "Seguro Social IGSS",
@@ -30,6 +42,12 @@ GROUPS = {
         "view": "vw_g3_fact_prestacion_igss",
         "inbox": "ingesta_g3_prestacion",
         "read_only": False,
+        "catalogs": ("tiempo", "establecimiento", "geografia", "servicio", "diagnostico"),
+        "metric": "prestaciones",
+        "metric_label": "Prestaciones",
+        "category": "Establecimiento",
+        "money_candidates": ("monto_cobrado", "costo_promedio"),
+        "days_candidates": ("dias_estancia",),
     },
     4: {
         "name": "Diagnóstico y ONG",
@@ -40,6 +58,12 @@ GROUPS = {
         "view": "vw_g4_fact_servicio",
         "inbox": "ingesta_g4_servicio",
         "read_only": False,
+        "catalogs": ("tiempo", "establecimiento", "geografia", "servicio", "diagnostico"),
+        "metric": "servicios",
+        "metric_label": "Servicios",
+        "category": "Servicio",
+        "money_candidates": ("monto_cobrado", "costo_promedio"),
+        "days_candidates": ("dias_estancia",),
     },
     5: {
         "name": "Aseguradoras",
@@ -49,6 +73,12 @@ GROUPS = {
         "database": "sisg_analitica",
         "view": "vw_g5_fact_costo_atencion",
         "read_only": True,
+        "catalogs": ("tiempo", "establecimiento", "geografia", "servicio"),
+        "metric": "atenciones",
+        "metric_label": "Atenciones",
+        "category": "Establecimiento",
+        "money_candidates": ("monto_cobrado", "costo_promedio"),
+        "days_candidates": ("dias_estancia",),
     },
     6: {
         "name": "Organizaciones internacionales",
@@ -58,6 +88,12 @@ GROUPS = {
         "database": "sisg_analitica",
         "view": "vw_g6_fact_nacimiento",
         "read_only": True,
+        "catalogs": ("tiempo", "geografia", "evento", "parto", "demografia"),
+        "metric": "nacimientos",
+        "metric_label": "Nacimientos",
+        "category": "Municipio / Depto.",
+        "money_candidates": (),
+        "days_candidates": (),
     },
     7: {
         "name": "Universidades",
@@ -67,6 +103,12 @@ GROUPS = {
         "database": "sisg_analitica",
         "view": "vw_g7_fact_defuncion",
         "read_only": True,
+        "catalogs": ("tiempo", "geografia", "evento", "demografia"),
+        "metric": "defunciones",
+        "metric_label": "Defunciones",
+        "category": "Municipio / Depto.",
+        "money_candidates": (),
+        "days_candidates": (),
     },
     8: {
         "name": "Gestor de plataforma",
@@ -76,15 +118,59 @@ GROUPS = {
         "database": "sisg_dw",
         "view": None,
         "read_only": False,
+        "catalogs": (),
     },
 }
 
 CENTRAL_GROUP_ID = 8
-CATALOG_VIEWS = (
-    "vw_cat_tiempo",
-    "vw_cat_geografia",
-    "vw_cat_establecimiento",
-    "vw_cat_diagnostico",
-    "vw_cat_servicio",
-)
+CATALOG_VIEWS = {
+    "tiempo": {
+        "view": "vw_cat_tiempo",
+        "fact_keys": ("sk_tiempo", "id_tiempo"),
+        "catalog_keys": ("sk_tiempo", "id_tiempo", "id"),
+        "labels": ("nombre_periodo", "periodo", "nombre_mes", "mes_nombre", "fecha", "descripcion", "mes"),
+    },
+    "geografia": {
+        "view": "vw_cat_geografia",
+        "fact_keys": ("sk_geografia", "sk_municipio", "id_geografia", "id_municipio"),
+        "catalog_keys": ("sk_geografia", "sk_municipio", "id_geografia", "id_municipio", "id"),
+        "labels": ("municipio_departamento", "nombre_municipio", "municipio", "nombre_departamento", "departamento", "descripcion", "nombre"),
+    },
+    "establecimiento": {
+        "view": "vw_cat_establecimiento",
+        "fact_keys": ("sk_establecimiento", "id_establecimiento"),
+        "catalog_keys": ("sk_establecimiento", "id_establecimiento", "id"),
+        "labels": ("nombre_establecimiento", "establecimiento", "razon_social", "descripcion", "nombre"),
+    },
+    "diagnostico": {
+        "view": "vw_cat_diagnostico",
+        "fact_keys": ("sk_diagnostico", "id_diagnostico"),
+        "catalog_keys": ("sk_diagnostico", "id_diagnostico", "id"),
+        "labels": ("descripcion_diagnostico", "nombre_diagnostico", "diagnostico", "descripcion", "cie10", "nombre"),
+    },
+    "servicio": {
+        "view": "vw_cat_servicio",
+        "fact_keys": ("sk_servicio", "id_servicio"),
+        "catalog_keys": ("sk_servicio", "id_servicio", "id"),
+        "labels": ("nombre_servicio", "servicio", "especialidad", "descripcion", "nombre"),
+    },
+    "evento": {
+        "view": "vw_cat_evento",
+        "fact_keys": ("sk_evento", "id_evento"),
+        "catalog_keys": ("sk_evento", "id_evento", "id"),
+        "labels": ("nombre_evento", "evento", "descripcion", "nombre"),
+    },
+    "parto": {
+        "view": "vw_cat_parto",
+        "fact_keys": ("sk_parto", "id_parto"),
+        "catalog_keys": ("sk_parto", "id_parto", "id"),
+        "labels": ("nombre_parto", "tipo_parto", "parto", "descripcion", "nombre"),
+    },
+    "demografia": {
+        "view": "vw_cat_demografia",
+        "fact_keys": ("sk_demografia", "id_demografia"),
+        "catalog_keys": ("sk_demografia", "id_demografia", "id"),
+        "labels": ("nombre_demografia", "grupo_demografico", "demografia", "descripcion", "nombre"),
+    },
+}
 

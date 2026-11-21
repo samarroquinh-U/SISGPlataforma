@@ -3,42 +3,85 @@
 {% block content %}
 <section class="page-heading">
   <div><p class="eyebrow">GRUPO {{ "%02d"|format(active_group) }} · SISG ANALÍTICA</p><h1>{{ data.get("group", {}).get("name", "Tablero de grupo") }}</h1><p>{{ data.get("group", {}).get("description", "Vista analítica asignada a tu grupo.") }}</p></div>
-  <div class="metric-inline"><strong>{{ data.get("total", 0) }}</strong><span>registros visibles</span></div>
+  <div class="metric-inline"><strong>{{ data.get("total", 0)|formato_miles }}</strong><span>registros disponibles</span></div>
 </section>
-<section class="panel data-panel">
-  <div class="panel-heading"><div><p class="eyebrow">VISTA ASIGNADA</p><h2>{{ data.get("group", {}).get("view", "Datos del grupo") }}</h2></div><input class="quick-filter" type="search" placeholder="Filtrar filas…" aria-label="Filtrar tabla"></div>
-  {% if data.get("records") %}
-    <div class="table-wrap"><table class="filterable-table"><thead><tr>{% for column in data.get("columns", []) %}<th>{{ column|replace("_", " ")|title }}</th>{% endfor %}</tr></thead><tbody>{% for row in data.get("records", []) %}<tr>{% for value in row.values() %}<td>{{ value if value is not none else "—" }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
-  {% else %}
-    <div class="empty-state"><strong>La vista no contiene filas</strong><p>Si esperabas encontrar datos, verifica que la vista asignada exista y que tu cuenta tenga permiso de lectura.</p></div>
+<nav class="dashboard-tabs" role="tablist" aria-label="Secciones del tablero">
+  <button class="dashboard-tab is-active" id="tab-analytics" type="button" role="tab" aria-selected="true" aria-controls="panel-analytics" data-tab-target="panel-analytics">Tablero Analítico y Gráficos</button>
+  <button class="dashboard-tab" id="tab-details" type="button" role="tab" aria-selected="false" aria-controls="panel-details" data-tab-target="panel-details">Datos Detallados</button>
+  {% if active_group in [1, 2, 3, 4] and data.get("group", {}).get("inbox") %}
+    <button class="dashboard-tab" id="tab-entry" type="button" role="tab" aria-selected="false" aria-controls="panel-entry" data-tab-target="panel-entry">Registrar / Ingresar Datos</button>
   {% endif %}
-</section>
-{% if not data.get("group", {}).get("read_only") %}
-<section class="panel ingestion-panel">
-  <div class="panel-heading"><div><p class="eyebrow">APORTE DE INFORMACIÓN</p><h2>Enviar registro al buzón</h2><p>Los campos se leen del esquema de la tabla asignada a tu grupo.</p></div><span class="badge badge-neutral">{{ data.get("group", {}).get("inbox") }}</span></div>
-  {% if form.get("fields") %}
-  <form class="ingestion-form" method="post" action="{{ url_for('dashboard.ingestion') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    {% for field in form.get("fields", []) %}
-      <div class="ingestion-field">
-        <label for="field-{{ field.name }}">{{ field.name|replace("_", " ")|title }} <span class="required-mark">*</span></label>
-        {% if form.get("field_catalogs", {}).get(field.name) %}
-          <select id="field-{{ field.name }}" name="{{ field.name }}" required>
-            <option value="">Selecciona una opción</option>
-            {% for option in form.get("field_catalogs", {}).get(field.name, []) %}
-              <option value="{{ option }}">{{ option }}</option>
-            {% endfor %}
-          </select>
-        {% else %}
-          <input id="field-{{ field.name }}" name="{{ field.name }}" {% if field.data_type in ["int", "bigint", "decimal", "float", "double"] %}inputmode="decimal"{% endif %} required>
-        {% endif %}
-      </div>
+</nav>
+<section class="tab-panel" id="panel-analytics" role="tabpanel" aria-labelledby="tab-analytics">
+  <div class="metric-grid group-metric-grid">
+    {% for kpi in data.get("kpis", []) %}
+      <article class="metric-card">
+        <span class="metric-label">{{ kpi.label }}</span>
+        <strong>
+          {% if kpi.format == "quetzal" %}{{ kpi.value|formato_quetzal }}
+          {% elif kpi.format == "miles" %}{{ kpi.value|formato_miles }}
+          {% else %}{{ "%.1f"|format(kpi.value or 0) }}{% endif %}
+        </strong>
+        <span class="metric-foot">Grupo {{ "%02d"|format(active_group) }}</span>
+      </article>
     {% endfor %}
-    <button class="button" type="submit">Enviar al buzón <span aria-hidden="true">→</span></button>
-  </form>
-  {% else %}
-  <div class="empty-state"><strong>Formulario no disponible</strong><p>No se encontraron campos obligatorios para esta tabla buzón.</p></div>
-  {% endif %}
+  </div>
+  <div class="chart-grid">
+    <section class="panel chart-panel">
+      <div class="panel-heading"><div><p class="eyebrow">TENDENCIA</p><h2>Evolución mensual · {{ data.get("charts", {}).get("metric_label", "Registros") }}</h2></div></div>
+      <div class="chart-canvas"><canvas data-chart="monthly" aria-label="Evolución mensual de la métrica del grupo"></canvas></div>
+    </section>
+    <section class="panel chart-panel">
+      <div class="panel-heading"><div><p class="eyebrow">DISTRIBUCIÓN</p><h2>Por {{ data.get("charts", {}).get("category_label", "categoría") }}</h2></div></div>
+      <div class="chart-canvas"><canvas data-chart="categories" aria-label="Distribución por categoría"></canvas></div>
+    </section>
+  </div>
+</section>
+<section class="tab-panel" id="panel-details" role="tabpanel" aria-labelledby="tab-details" hidden>
+  <section class="panel data-panel">
+    <div class="panel-heading">
+      <div><p class="eyebrow">VISTA ASIGNADA</p><h2>Consultar Registros</h2><p>{{ data.get("records", [])|length|formato_miles }} filas en el resultado consultado</p></div>
+      <input class="quick-filter" type="search" placeholder="Filtrar filas…" aria-label="Filtrar tabla">
+    </div>
+    {% if data.get("records") %}
+      <div class="table-wrap"><table class="filterable-table"><thead><tr>{% for column in data.get("columns", []) %}<th>{{ column }}</th>{% endfor %}</tr></thead><tbody>{% for row in data.get("records", []) %}<tr>{% for column, value in row.items() %}<td>{{ value|formato_celda(column) }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+    {% else %}
+      <div class="empty-state"><strong>La vista no contiene filas</strong><p>Verifica que la vista asignada exista y que tu cuenta tenga permiso de lectura.</p></div>
+    {% endif %}
+  </section>
+</section>
+{% if active_group in [1, 2, 3, 4] and data.get("group", {}).get("inbox") %}
+<section class="tab-panel" id="panel-entry" role="tabpanel" aria-labelledby="tab-entry" hidden>
+  <section class="panel ingestion-panel">
+    <div class="panel-heading"><div><p class="eyebrow">APORTE DE INFORMACIÓN</p><h2>Registrar en el buzón</h2><p>Completa los campos obligatorios. Las opciones de catálogo muestran su nombre descriptivo.</p></div><span class="badge badge-neutral">{{ data.get("group", {}).get("inbox") }}</span></div>
+    {% if form.get("fields") %}
+    <form class="ingestion-form" method="post" action="{{ url_for('dashboard.ingestion') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {% for field in form.get("fields", []) %}
+        <div class="ingestion-field">
+          <label for="field-{{ field.name }}">{{ field.name|replace("_", " ")|title }} <span class="required-mark">*</span></label>
+          {% if form.get("field_catalogs", {}).get(field.name) %}
+            <select id="field-{{ field.name }}" name="{{ field.name }}" required>
+              <option value="">Selecciona una opción</option>
+              {% for option in form.get("field_catalogs", {}).get(field.name, []) %}
+                <option value="{{ option.value }}">{{ option.label }}</option>
+              {% endfor %}
+            </select>
+          {% else %}
+            <input id="field-{{ field.name }}" name="{{ field.name }}" {% if field.data_type in ["int", "bigint", "decimal", "float", "double"] %}inputmode="decimal"{% endif %} required>
+          {% endif %}
+        </div>
+      {% endfor %}
+      <button class="button" type="submit">Enviar al buzón <span aria-hidden="true">→</span></button>
+    </form>
+    {% else %}
+    <div class="empty-state"><strong>Formulario no disponible</strong><p>No se encontraron campos obligatorios para esta tabla buzón.</p></div>
+    {% endif %}
+  </section>
 </section>
 {% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script type="application/json" id="group-chart-data">{{ data.get("charts", {})|tojson }}</script>
 {% endblock %}
