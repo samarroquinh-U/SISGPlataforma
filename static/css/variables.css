@@ -1,0 +1,15 @@
+:root {
+  color-scheme: light;
+  --navy: #0F2C59;
+  --navy-hover: #1B3B6F;
+  --gold: #C59B27;
+  --page: #F8FAFC;
+  --surface: #FFFFFF;
+  --border: #E2E8F0;
+  --text: #1E293B;
+  --muted: #64748B;
+  --success: #15803D;
+  --warning: #B45309;
+  --error: #B91C1C;
+  --font: Inter, "Segoe UI", Arial, sans-serif;
+}

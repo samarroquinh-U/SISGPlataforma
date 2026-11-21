@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ data.get("group", {}).get("name", "Tablero") }} · SISG{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div><p class="eyebrow">GRUPO {{ "%02d"|format(active_group) }} · SISG ANALÍTICA</p><h1>{{ data.get("group", {}).get("name", "Tablero de grupo") }}</h1><p>{{ data.get("group", {}).get("description", "Vista analítica asignada a tu grupo.") }}</p></div>
+  <div class="metric-inline"><strong>{{ data.get("total", 0) }}</strong><span>registros visibles</span></div>
+</section>
+<section class="panel data-panel">
+  <div class="panel-heading"><div><p class="eyebrow">VISTA ASIGNADA</p><h2>{{ data.get("group", {}).get("view", "Datos del grupo") }}</h2></div><input class="quick-filter" type="search" placeholder="Filtrar filas…" aria-label="Filtrar tabla"></div>
+  {% if data.get("records") %}
+    <div class="table-wrap"><table class="filterable-table"><thead><tr>{% for column in data.get("columns", []) %}<th>{{ column|replace("_", " ")|title }}</th>{% endfor %}</tr></thead><tbody>{% for row in data.get("records", []) %}<tr>{% for value in row.values() %}<td>{{ value if value is not none else "—" }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+  {% else %}
+    <div class="empty-state"><strong>La vista no contiene filas</strong><p>Si esperabas encontrar datos, verifica que la vista asignada exista y que tu cuenta tenga permiso de lectura.</p></div>
+  {% endif %}
+</section>
+{% if not data.get("group", {}).get("read_only") %}
+<section class="panel ingestion-panel">
+  <div class="panel-heading"><div><p class="eyebrow">APORTE DE INFORMACIÓN</p><h2>Enviar registro al buzón</h2><p>Los campos se leen del esquema de la tabla asignada a tu grupo.</p></div><span class="badge badge-neutral">{{ data.get("group", {}).get("inbox") }}</span></div>
+  {% if form.get("fields") %}
+  <form class="ingestion-form" method="post" action="{{ url_for('dashboard.ingestion') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% for field in form.get("fields", []) %}
+      <div class="ingestion-field">
+        <label for="field-{{ field.name }}">{{ field.name|replace("_", " ")|title }} <span class="required-mark">*</span></label>
+        {% if form.get("field_catalogs", {}).get(field.name) %}
+          <select id="field-{{ field.name }}" name="{{ field.name }}" required>
+            <option value="">Selecciona una opción</option>
+            {% for option in form.get("field_catalogs", {}).get(field.name, []) %}
+              <option value="{{ option }}">{{ option }}</option>
+            {% endfor %}
+          </select>
+        {% else %}
+          <input id="field-{{ field.name }}" name="{{ field.name }}" {% if field.data_type in ["int", "bigint", "decimal", "float", "double"] %}inputmode="decimal"{% endif %} required>
+        {% endif %}
+      </div>
+    {% endfor %}
+    <button class="button" type="submit">Enviar al buzón <span aria-hidden="true">→</span></button>
+  </form>
+  {% else %}
+  <div class="empty-state"><strong>Formulario no disponible</strong><p>No se encontraron campos obligatorios para esta tabla buzón.</p></div>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

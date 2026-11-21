@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Gestión central · SISG{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div><p class="eyebrow">GRUPO 08 · GESTOR DE PLATAFORMA</p><h1>Control central</h1><p>Auditoría de ingestas, actividad y estado del almacén de datos.</p></div>
+  <form method="post" action="{{ url_for('dashboard.run_etl') }}" data-confirm="¿Ejecutar el pipeline ETL completo?">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="button" type="submit">Ejecutar ETL <span aria-hidden="true">→</span></button>
+  </form>
+</section>
+<section class="metric-grid" aria-label="Métricas centrales">
+  {% for table, count in data.get("counts", {}).items() %}
+    <article class="metric-card"><span class="metric-label">{{ table|replace("_", " ")|title }}</span><strong>{{ count if count is not none else "—" }}</strong><span class="metric-foot">registros disponibles</span></article>
+  {% else %}
+    <article class="metric-card"><span class="metric-label">Estado del almacén</span><strong>—</strong><span class="metric-foot">Conecta con sisg_dw para consultar las métricas</span></article>
+  {% endfor %}
+</section>
+<section class="panel data-panel">
+  <div class="panel-heading"><div><p class="eyebrow">TRAZABILIDAD</p><h2>Últimas ingestas registradas</h2></div><span class="badge badge-neutral">sisg_dw</span></div>
+  {% set ingestas = data.get("ingestas", []) %}
+  {% if ingestas %}
+    <div class="table-wrap"><table><thead><tr>{% for key in ingestas[0].keys() %}<th>{{ key|replace("_", " ")|title }}</th>{% endfor %}</tr></thead><tbody>
+      {% for row in ingestas %}<tr>{% for value in row.values() %}<td>{{ value if value is not none else "—" }}</td>{% endfor %}</tr>{% endfor %}
+    </tbody></table></div>
+  {% else %}
+    <div class="empty-state"><strong>Sin registros disponibles</strong><p>La tabla de metadatos no está disponible o aún no hay ejecuciones de ingesta.</p></div>
+  {% endif %}
+</section>
+<section class="panel pipeline-note">
+  <div class="pipeline-symbol">ETL</div>
+  <div><h2>Pipeline de integración</h2><p>El proceso extrae el archivo de ejemplo de <code>data_entrada/</code>, estandariza los datos y registra la carga en el esquema central.</p></div>
+  <span class="badge badge-success">Preparado</span>
+</section>
+{% endblock %}

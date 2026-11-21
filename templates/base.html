@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0F2C59">
+  <title>{% block title %}SISG · Sistema Integrado de Salud de Guatemala{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/variables.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <div class="app-shell">
+    {% if current_group_id %}
+    <aside class="sidebar">
+      <a class="brand" href="{{ url_for('main.home') }}">
+        <span class="brand-mark">S</span>
+        <span><strong>SISG</strong><small>Salud · Guatemala</small></span>
+      </a>
+      <div class="sidebar-label">PLATAFORMA</div>
+      <nav class="side-nav" aria-label="Navegación principal">
+        {% if current_group_id == 8 %}
+          <a class="nav-link" href="{{ url_for('dashboard.central') }}">Resumen central</a>
+        {% else %}
+          <a class="nav-link" href="{{ url_for('dashboard.group', group_id=current_group_id) }}">Mi tablero</a>
+        {% endif %}
+        <a class="nav-link" href="{{ url_for('main.home') }}">Portal institucional</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <span class="status-dot"></span>
+        <span>Sesión autenticada</span>
+      </div>
+    </aside>
+    {% endif %}
+    <div class="main-column">
+      <header class="topbar">
+        <a class="topbar-brand" href="{{ url_for('main.home') }}">Sistema Integrado de Salud de Guatemala</a>
+        <div class="topbar-actions">
+          {% if current_group_id %}
+            <span class="connection-label">
+              <span class="status-dot"></span>
+              {% if current_group_id == 8 %}sisg_dw{% else %}sisg_analitica{% endif %}
+            </span>
+            <details class="connection-menu">
+              <summary>Cambiar conexión activa</summary>
+              <form method="post" action="{{ url_for('dashboard.change_connection') }}" class="connection-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <label for="switch-user">Usuario MySQL</label>
+                <input id="switch-user" name="username" autocomplete="username" required>
+                <label for="switch-password">Contraseña</label>
+                <input id="switch-password" name="password" type="password" autocomplete="current-password" required>
+                <button class="button button-small" type="submit">Validar y cambiar</button>
+              </form>
+            </details>
+            <form method="post" action="{{ url_for('auth.logout') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="button button-quiet" type="submit">Salir</button>
+            </form>
+          {% else %}
+            <a class="button button-small" href="{{ url_for('auth.login') }}">Ingresar al portal</a>
+          {% endif %}
+        </div>
+      </header>
+      <main class="page-content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-stack" aria-live="polite">
+              {% for category, message in messages %}
+                <div class="flash flash-{{ category }}">{{ message }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+      </main>
+      <footer class="site-footer">
+        <span>SISG · Plataforma de gestión de información en salud</span>
+        <span>Grupo 8 · Gestor de plataforma</span>
+      </footer>
+    </div>
+  </div>
+  <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

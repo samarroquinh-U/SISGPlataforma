@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Ingreso al portal · SISG{% endblock %}
+{% block content %}
+<section class="login-layout">
+  <div class="login-context">
+    <p class="eyebrow">ACCESO INSTITUCIONAL</p>
+    <h1>Bienvenido al portal SISG.</h1>
+    <p>Ingresa con las credenciales MySQL asignadas a tu grupo. La plataforma valida el acceso directamente contra el servidor de datos.</p>
+    <div class="login-security"><span class="status-dot"></span> Conexión verificada en cada inicio de sesión</div>
+  </div>
+  <form class="panel login-card" method="post" action="{{ url_for('auth.login') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <p class="eyebrow">SISTEMA INTEGRADO DE SALUD</p>
+    <h2>Ingresar</h2>
+    <label for="username">Usuario MySQL</label>
+    <input id="username" name="username" autocomplete="username" required autofocus>
+    <label for="password">Contraseña</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button class="button button-full" type="submit">Validar acceso</button>
+    <a class="back-link" href="{{ url_for('main.home') }}">← Volver al portal público</a>
+  </form>
+</section>
+{% endblock %}

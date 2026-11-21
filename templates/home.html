@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}SISG · Portal institucional{% endblock %}
+{% block content %}
+<section class="hero">
+  <div class="hero-copy">
+    <p class="eyebrow">PLATAFORMA NACIONAL · GUATEMALA</p>
+    <h1>Información integrada para una mejor salud pública.</h1>
+    <p class="hero-lead">El Sistema Integrado de Salud de Guatemala conecta fuentes, instituciones y conocimiento en una plataforma común de análisis y gestión.</p>
+    <a class="button" href="{{ url_for('auth.login') }}">Ingresar al Portal <span aria-hidden="true">→</span></a>
+  </div>
+  <div class="hub-panel" aria-label="Arquitectura de la plataforma">
+    <div class="hub-core"><strong>SISG</strong><span>Gestión central</span></div>
+    <div class="hub-orbit">
+      {% for group_id, group in groups.items() %}
+        <span class="hub-node node-{{ group_id }}">{{ "%02d"|format(group_id) }}</span>
+      {% endfor %}
+    </div>
+    <p>Un núcleo común · ocho grupos de trabajo</p>
+  </div>
+</section>
+<section class="section-block">
+  <div class="section-heading">
+    <div><p class="eyebrow">ECOSISTEMA SISG</p><h2>Una red de información, ocho perspectivas</h2></div>
+    <p>Arquitectura Hub-and-Spoke: cada grupo aporta o consulta información según su rol, bajo coordinación de una gestión central.</p>
+  </div>
+  <div class="group-grid">
+    {% for group_id, group in groups.items() %}
+      <article class="group-card">
+        <span class="group-number">GRUPO {{ "%02d"|format(group_id) }}</span>
+        <h3>{{ group.name }}</h3>
+        <p>{{ group.description }}</p>
+        <span class="group-role">{% if group_id == 8 %}Gestión y auditoría{% elif group.read_only %}Consulta analítica{% else %}Aporte de información{% endif %}</span>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+<section class="institution-note">
+  <div class="note-rule"></div>
+  <div><p class="eyebrow">COORDINACIÓN CENTRAL</p><h2>Datos responsables. Decisiones informadas.</h2><p>El Grupo 8 administra la plataforma, audita las cargas y mantiene el flujo de integración entre los equipos del ecosistema.</p></div>
+  <a class="text-link" href="{{ url_for('auth.login') }}">Acceso de equipos <span aria-hidden="true">→</span></a>
+</section>
+{% endblock %}

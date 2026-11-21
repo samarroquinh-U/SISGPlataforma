@@ -1,0 +1,90 @@
+"""Metadata y permisos de los grupos del ecosistema SISG."""
+
+GROUPS = {
+    1: {
+        "name": "Atención privada",
+        "description": "Prestadores privados de servicios de salud.",
+        "username_env": "DB_USER_GROUP_1",
+        "password_env": "DB_PASSWORD_GROUP_1",
+        "database": "sisg_analitica",
+        "view": "vw_g1_fact_atencion_privada",
+        "inbox": "ingesta_g1_atencion",
+        "read_only": False,
+    },
+    2: {
+        "name": "Red pública",
+        "description": "Servicios y establecimientos de la red pública.",
+        "username_env": "DB_USER_GROUP_2",
+        "password_env": "DB_PASSWORD_GROUP_2",
+        "database": "sisg_analitica",
+        "view": "vw_g2_fact_morbilidad",
+        "inbox": "ingesta_g2_morbilidad",
+        "read_only": False,
+    },
+    3: {
+        "name": "Seguro Social IGSS",
+        "description": "Prestaciones y servicios del seguro social.",
+        "username_env": "DB_USER_GROUP_3",
+        "password_env": "DB_PASSWORD_GROUP_3",
+        "database": "sisg_analitica",
+        "view": "vw_g3_fact_prestacion_igss",
+        "inbox": "ingesta_g3_prestacion",
+        "read_only": False,
+    },
+    4: {
+        "name": "Diagnóstico y ONG",
+        "description": "Servicios de diagnóstico y organizaciones no gubernamentales.",
+        "username_env": "DB_USER_GROUP_4",
+        "password_env": "DB_PASSWORD_GROUP_4",
+        "database": "sisg_analitica",
+        "view": "vw_g4_fact_servicio",
+        "inbox": "ingesta_g4_servicio",
+        "read_only": False,
+    },
+    5: {
+        "name": "Aseguradoras",
+        "description": "Consulta agregada de costos de atención.",
+        "username_env": "DB_USER_GROUP_5",
+        "password_env": "DB_PASSWORD_GROUP_5",
+        "database": "sisg_analitica",
+        "view": "vw_g5_fact_costo_atencion",
+        "read_only": True,
+    },
+    6: {
+        "name": "Organizaciones internacionales",
+        "description": "Indicadores agregados de nacimientos.",
+        "username_env": "DB_USER_GROUP_6",
+        "password_env": "DB_PASSWORD_GROUP_6",
+        "database": "sisg_analitica",
+        "view": "vw_g6_fact_nacimiento",
+        "read_only": True,
+    },
+    7: {
+        "name": "Universidades",
+        "description": "Consulta estadística de defunciones.",
+        "username_env": "DB_USER_GROUP_7",
+        "password_env": "DB_PASSWORD_GROUP_7",
+        "database": "sisg_analitica",
+        "view": "vw_g7_fact_defuncion",
+        "read_only": True,
+    },
+    8: {
+        "name": "Gestor de plataforma",
+        "description": "Administración, auditoría y orquestación central del SISG.",
+        "username_env": "DB_USER_GROUP_8",
+        "password_env": "DB_PASSWORD_GROUP_8",
+        "database": "sisg_dw",
+        "view": None,
+        "read_only": False,
+    },
+}
+
+CENTRAL_GROUP_ID = 8
+CATALOG_VIEWS = (
+    "vw_cat_tiempo",
+    "vw_cat_geografia",
+    "vw_cat_establecimiento",
+    "vw_cat_diagnostico",
+    "vw_cat_servicio",
+)
+
