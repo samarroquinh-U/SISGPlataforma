@@ -181,6 +181,8 @@ def fetch_central_metrics(connection) -> dict:
         "fact_uso_plataforma",
         "fact_atencion_privada",
         "fact_morbilidad",
+        "fact_prestacion_igss",
+        "fact_servicio",
         "fact_nacimiento",
         "fact_defuncion",
     )

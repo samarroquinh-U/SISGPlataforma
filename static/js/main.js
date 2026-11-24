@@ -30,36 +30,37 @@ document.addEventListener("DOMContentLoaded", () => {
         row.hidden = !row.textContent.toLocaleLowerCase().includes(query);
       });
     });
+  });
 
-    document.querySelectorAll("[data-tab-target]").forEach((tab) => {
-      tab.addEventListener("click", () => {
-        const tabList = tab.closest('[role="tablist"]');
-        if (!tabList) return;
-        tabList.querySelectorAll('[role="tab"]').forEach((item) => {
-          const selected = item === tab;
-          item.classList.toggle("is-active", selected);
-          item.setAttribute("aria-selected", String(selected));
-        });
-        tabList.parentElement
-          .querySelectorAll(".tab-panel")
-          .forEach((panel) => {
-            panel.hidden = panel.id !== tab.dataset.tabTarget;
-          });
+  document.querySelectorAll("[data-tab-target]").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const tabList = tab.closest('[role="tablist"]');
+      if (!tabList) return;
+      tabList.querySelectorAll('[role="tab"]').forEach((item) => {
+        const selected = item === tab;
+        item.classList.toggle("is-active", selected);
+        item.setAttribute("aria-selected", String(selected));
       });
+      tabList.parentElement
+        .querySelectorAll(".tab-panel")
+        .forEach((panel) => {
+          panel.hidden = panel.id !== tab.dataset.tabTarget;
+        });
     });
+  });
 
-    const groupDataNode = document.getElementById("group-chart-data");
-    if (groupDataNode && window.Chart) {
-      const chartData = JSON.parse(groupDataNode.textContent);
-      const monthlyData = chartData.monthly || { labels: [], values: [] };
-      const categoriesData = chartData.categories || { labels: [], values: [] };
-      const monthlyCanvas = document.querySelector('[data-chart="monthly"]');
-      const categoryCanvas = document.querySelector('[data-chart="categories"]');
-      const palette = ["#0F2C59", "#1B3B6F", "#C59B27", "#475569"];
-      const numberFormat = new Intl.NumberFormat("en-US");
+  const groupDataNode = document.getElementById("group-chart-data");
+  if (groupDataNode && window.Chart) {
+    const chartData = JSON.parse(groupDataNode.textContent);
+    const monthlyData = chartData.monthly || { labels: [], values: [] };
+    const categoriesData = chartData.categories || { labels: [], values: [] };
+    const monthlyCanvas = document.querySelector('[data-chart="monthly"]');
+    const categoryCanvas = document.querySelector('[data-chart="categories"]');
+    const palette = ["#0F2C59", "#1B3B6F", "#C59B27", "#475569"];
+    const numberFormat = new Intl.NumberFormat("en-US");
 
-      if (monthlyCanvas) {
-        new Chart(monthlyCanvas, {
+    if (monthlyCanvas) {
+      new Chart(monthlyCanvas, {
           type: "line",
           data: {
             labels: monthlyData.labels,
@@ -92,11 +93,11 @@ document.addEventListener("DOMContentLoaded", () => {
               y: { beginAtZero: true, ticks: { callback: (value) => numberFormat.format(value) } },
             },
           },
-        });
-      }
+      });
+    }
 
-      if (categoryCanvas) {
-        new Chart(categoryCanvas, {
+    if (categoryCanvas) {
+      new Chart(categoryCanvas, {
           type: "bar",
           data: {
             labels: categoriesData.labels,
@@ -126,18 +127,18 @@ document.addEventListener("DOMContentLoaded", () => {
               y: { grid: { display: false } },
             },
           },
-        });
-      }
+      });
     }
+  }
 
-    const centralChartNode = document.getElementById("central-chart-data");
-    const centralCanvas = document.querySelector('[data-chart="central-activity"]');
-    if (centralChartNode && centralCanvas && window.Chart) {
-      const chartData = JSON.parse(centralChartNode.textContent);
-      const labels = chartData.labels || [];
-      const values = chartData.values || [];
-      const numberFormat = new Intl.NumberFormat("en-US");
-      new Chart(centralCanvas, {
+  const centralChartNode = document.getElementById("central-chart-data");
+  const centralCanvas = document.querySelector('[data-chart="central-activity"]');
+  if (centralChartNode && centralCanvas && window.Chart) {
+    const chartData = JSON.parse(centralChartNode.textContent);
+    const labels = chartData.labels || [];
+    const values = chartData.values || [];
+    const numberFormat = new Intl.NumberFormat("en-US");
+    new Chart(centralCanvas, {
         type: "bar",
         data: {
           labels,
@@ -159,7 +160,48 @@ document.addEventListener("DOMContentLoaded", () => {
             y: { beginAtZero: true, ticks: { callback: (value) => numberFormat.format(value) } },
           },
         },
-      });
-    }
-  });
+    });
+  }
+
+  const etlChartNode = document.getElementById("etl-monitor-chart-data");
+  const etlCanvas = document.querySelector('[data-chart="etl-monitor"]');
+  if (etlChartNode && etlCanvas && window.Chart) {
+    const chartData = JSON.parse(etlChartNode.textContent);
+    const numberFormat = new Intl.NumberFormat("en-US");
+    new Chart(etlCanvas, {
+      type: "bar",
+      data: {
+        labels: chartData.labels || [],
+        datasets: [
+          {
+            label: "Recibidos en buzón",
+            data: chartData.received || [],
+            backgroundColor: "#0F2C59",
+            borderWidth: 0,
+            borderRadius: 2,
+          },
+          {
+            label: "Enviados al DW",
+            data: chartData.sent || [],
+            backgroundColor: "#C59B27",
+            borderWidth: 0,
+            borderRadius: 2,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: { legend: { position: "bottom" } },
+        scales: {
+          x: { grid: { display: false } },
+          y: {
+            beginAtZero: true,
+            ticks: { callback: (value) => numberFormat.format(value) },
+          },
+        },
+      },
+    });
+  }
 });

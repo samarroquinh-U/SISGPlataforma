@@ -22,6 +22,8 @@ from database.queries import (
     fetch_table_columns,
     insert_inbox_row,
 )
+from etl.extract import ANALYTICS_SCHEMA, INBOXES
+from etl.load import IDEMPOTENCY_TABLE
 
 logger = logging.getLogger(__name__)
 
@@ -377,10 +379,130 @@ def central_dashboard() -> dict:
     engine = get_engine(8)
     with engine.connect() as connection:
         metrics = fetch_central_metrics(connection)
+        metrics["etl_monitor"] = _etl_monitor_data(connection)
     metrics["activity_chart"] = _central_activity_chart(
         metrics.get("usos", []), metrics.get("ingestas", [])
     )
     return metrics
+
+
+def _etl_monitor_data(connection) -> dict:
+    """Resume recepción, pendientes, limpieza y filas cargadas por buzón."""
+    status_columns = {
+        row[0]
+        for row in connection.execute(
+            text(
+                """
+                SELECT TABLE_NAME FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = :schema_name
+                  AND COLUMN_NAME = 'procesado_etl'
+                """
+            ),
+            {"schema_name": ANALYTICS_SCHEMA},
+        )
+    }
+    warehouse_tables = {
+        row[0]
+        for row in connection.execute(
+            text(
+                """
+                SELECT TABLE_NAME FROM information_schema.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                """
+            )
+        )
+    }
+    ledger_exists = IDEMPOTENCY_TABLE in warehouse_tables
+    details = []
+    for inbox in INBOXES:
+        table_name = inbox["table"]
+        if table_name in status_columns:
+            row = connection.execute(
+                text(
+                    f"""
+                    SELECT COUNT(*) AS received,
+                           COALESCE(SUM(`procesado_etl` = 0), 0) AS pending,
+                           COALESCE(SUM(`procesado_etl` = 1), 0) AS processed
+                    FROM `{ANALYTICS_SCHEMA}`.`{table_name}`
+                    """
+                )
+            ).mappings().one()
+            received = int(row["received"])
+            pending = int(row["pending"])
+            processed = int(row["processed"])
+        else:
+            received = int(
+                connection.execute(
+                    text(
+                        f"SELECT COUNT(*) FROM "
+                        f"`{ANALYTICS_SCHEMA}`.`{table_name}`"
+                    )
+                ).scalar_one()
+            )
+            pending = received
+            processed = 0
+
+        sent = 0
+        if ledger_exists:
+            sent = int(
+                connection.execute(
+                    text(
+                        f"""
+                        SELECT COALESCE(SUM(`filas_insertadas`), 0)
+                        FROM `{IDEMPOTENCY_TABLE}`
+                        WHERE `tabla_buzon` = :source_table
+                        """
+                    ),
+                    {"source_table": table_name},
+                ).scalar_one()
+            )
+        details.append(
+            {
+                "group_id": inbox["group_id"],
+                "group_name": GROUPS[inbox["group_id"]]["name"],
+                "inbox": table_name,
+                "target": inbox["target"],
+                "received": received,
+                "pending": pending,
+                "processed": processed,
+                "sent": sent,
+                "cleaned": _ledger_count(
+                    connection, inbox["table"], "filas_limpiadas", ledger_exists
+                ),
+            }
+        )
+
+    return {
+        "received_total": sum(item["received"] for item in details),
+        "pending_total": sum(item["pending"] for item in details),
+        "processed_total": sum(item["processed"] for item in details),
+        "cleaned_total": sum(item["cleaned"] for item in details),
+        "loaded_total": sum(item["sent"] for item in details),
+        "groups": details,
+        "chart": {
+            "labels": [f"Grupo {item['group_id']}" for item in details],
+            "received": [item["received"] for item in details],
+            "sent": [item["sent"] for item in details],
+        },
+    }
+
+
+def _ledger_count(
+    connection,
+    source_table: str,
+    column: str,
+    ledger_exists: bool,
+) -> int:
+    if not ledger_exists or column not in {"filas_limpiadas", "filas_insertadas"}:
+        return 0
+    result = connection.execute(
+        text(
+            f"SELECT COALESCE(SUM(`{column}`), 0) "
+            f"FROM `{IDEMPOTENCY_TABLE}` WHERE `tabla_buzon` = :source_table"
+        ),
+        {"source_table": source_table},
+    ).scalar_one()
+    return int(result)
 
 
 def _central_activity_chart(usos: list, ingestas: list) -> dict:

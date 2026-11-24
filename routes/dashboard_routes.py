@@ -4,7 +4,6 @@ from functools import wraps
 
 from flask import (
     Blueprint,
-    current_app,
     flash,
     redirect,
     render_template,
@@ -138,16 +137,15 @@ def run_etl():
         flash("La sesión del formulario expiró.", "error")
         return dashboard_redirect(8)
     try:
-        result = ejecutar_etl_completo(
-            source_path=current_app.config["ETL_INPUT_PATH"]
-        )
+        result = ejecutar_etl_completo()
     except (OSError, ValueError, RuntimeError, SQLAlchemyError) as error:
         flash(f"El ETL no pudo completarse: {error}", "error")
     else:
         flash(
             "ETL completado: "
-            f"{result['extracted']} extraídas, {result['transformed']} transformadas, "
-            f"{result['loaded']} cargadas en {result['target']}.",
+            f"{result['extracted']} recibidas, {result['transformed']} limpias/"
+            f"homologadas, {result['loaded']} enviadas al DW y "
+            f"{result['already_processed']} omitidas por ya estar procesadas.",
             "success",
         )
     return dashboard_redirect(8)

@@ -109,7 +109,15 @@ def formato_celda(value, column: str) -> str:
     ):
         return formato_miles(value)
     if any(
-        token in normalized_column for token in ("fecha", "periodo", "period")
+        token in normalized_column
+        for token in (
+            "fecha",
+            "periodo",
+            "period",
+            "created at",
+            "updated at",
+            "timestamp",
+        )
     ):
         return formato_fecha(value)
     return "—" if value is None else str(value)

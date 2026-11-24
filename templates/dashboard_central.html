@@ -3,40 +3,80 @@
 {% block content %}
 <section class="page-heading">
   <div><p class="eyebrow">GRUPO 08 · GESTOR DE PLATAFORMA</p><h1>Control central</h1><p>Auditoría de ingestas, actividad y estado del almacén de datos.</p></div>
-  <form method="post" action="{{ url_for('dashboard.run_etl') }}" data-confirm="¿Ejecutar el pipeline ETL completo?">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button class="button" type="submit">Ejecutar ETL <span aria-hidden="true">→</span></button>
-  </form>
 </section>
-<section class="metric-grid" aria-label="Métricas centrales">
-  {% for table, count in data.get("counts", {}).items() %}
-    <article class="metric-card"><span class="metric-label">{{ table|replace("_", " ")|title }}</span><strong>{{ count|formato_miles }}</strong><span class="metric-foot">registros disponibles</span></article>
-  {% else %}
-    <article class="metric-card"><span class="metric-label">Estado del almacén</span><strong>—</strong><span class="metric-foot">Conecta con sisg_dw para consultar las métricas</span></article>
-  {% endfor %}
+{% if current_group_id == 8 %}
+<nav class="dashboard-tabs" role="tablist" aria-label="Secciones de gestión central">
+  <button class="dashboard-tab is-active" id="tab-central-summary" type="button" role="tab" aria-selected="true" aria-controls="panel-central-summary" data-tab-target="panel-central-summary">Resumen General del Almacén</button>
+  <button class="dashboard-tab" id="tab-etl-monitor" type="button" role="tab" aria-selected="false" aria-controls="panel-etl-monitor" data-tab-target="panel-etl-monitor">Monitor ETL</button>
+</nav>
+{% endif %}
+<section class="tab-panel" id="panel-central-summary" role="tabpanel" aria-labelledby="tab-central-summary">
+  <section class="metric-grid" aria-label="Métricas centrales">
+    {% for table, count in data.get("counts", {}).items() %}
+      <article class="metric-card"><span class="metric-label">{{ table|replace("_", " ")|title }}</span><strong>{{ count|formato_miles }}</strong><span class="metric-foot">registros disponibles</span></article>
+    {% else %}
+      <article class="metric-card"><span class="metric-label">Estado del almacén</span><strong>—</strong><span class="metric-foot">Conecta con sisg_dw para consultar las métricas</span></article>
+    {% endfor %}
+  </section>
+  <section class="panel central-chart-panel">
+    <div class="panel-heading"><div><p class="eyebrow">ACTIVIDAD DE PLATAFORMA</p><h2>Filas procesadas por grupo / actor</h2></div><span class="badge badge-neutral">Auditoría SISG</span></div>
+    <div class="chart-canvas"><canvas data-chart="central-activity" aria-label="Filas procesadas por grupo o actor"></canvas></div>
+  </section>
+  <section class="panel data-panel">
+    <div class="panel-heading"><div><p class="eyebrow">TRAZABILIDAD</p><h2>Últimas ingestas registradas</h2></div><span class="badge badge-neutral">sisg_dw</span></div>
+    {% set ingestas = data.get("ingestas", []) %}
+    {% if ingestas %}
+      <div class="table-wrap"><table><thead><tr>{% for key in ingestas[0].keys() %}<th>{{ key|replace("_", " ")|title }}</th>{% endfor %}</tr></thead><tbody>
+        {% for row in ingestas %}<tr>{% for key, value in row.items() %}<td>{{ value|formato_celda(key|replace("_", " ")) }}</td>{% endfor %}</tr>{% endfor %}
+      </tbody></table></div>
+    {% else %}
+      <div class="empty-state"><strong>Sin registros disponibles</strong><p>La tabla de metadatos no está disponible o aún no hay ejecuciones de ingesta.</p></div>
+    {% endif %}
+  </section>
+  <section class="panel pipeline-note">
+    <div class="pipeline-symbol">ETL</div>
+    <div><h2>Pipeline de integración</h2><p>Los registros pendientes de los cuatro buzones se limpian, homologan y cargan sin eliminar el respaldo de origen.</p></div>
+    <span class="badge badge-success">Buzones G1–G4</span>
+  </section>
 </section>
-<section class="panel central-chart-panel">
-  <div class="panel-heading"><div><p class="eyebrow">ACTIVIDAD DE PLATAFORMA</p><h2>Filas procesadas por grupo / actor</h2></div><span class="badge badge-neutral">Auditoría SISG</span></div>
-  <div class="chart-canvas"><canvas data-chart="central-activity" aria-label="Filas procesadas por grupo o actor"></canvas></div>
-</section>
-<section class="panel data-panel">
-  <div class="panel-heading"><div><p class="eyebrow">TRAZABILIDAD</p><h2>Últimas ingestas registradas</h2></div><span class="badge badge-neutral">sisg_dw</span></div>
-  {% set ingestas = data.get("ingestas", []) %}
-  {% if ingestas %}
-    <div class="table-wrap"><table><thead><tr>{% for key in ingestas[0].keys() %}<th>{{ key|replace("_", " ")|title }}</th>{% endfor %}</tr></thead><tbody>
-      {% for row in ingestas %}<tr>{% for key, value in row.items() %}<td>{{ value|formato_celda(key|replace("_", " ")) }}</td>{% endfor %}</tr>{% endfor %}
+
+{% if current_group_id == 8 %}
+{% set monitor = data.get("etl_monitor", {}) %}
+<section class="tab-panel" id="panel-etl-monitor" role="tabpanel" aria-labelledby="tab-etl-monitor" hidden>
+  <section class="page-heading etl-monitor-heading">
+    <div><p class="eyebrow">TRAZABILIDAD DE DATOS</p><h2>Monitor ETL</h2><p>Recibidos, limpiados/homologados y enviados al almacén.</p></div>
+    <form method="post" action="{{ url_for('dashboard.run_etl') }}" data-confirm="¿Procesar los registros pendientes de los cuatro buzones?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="button etl-run-button" type="submit">Ejecutar ETL Ahora <span aria-hidden="true">→</span></button>
+    </form>
+  </section>
+  <section class="metric-grid etl-metric-grid" aria-label="Métricas del flujo ETL">
+    <article class="metric-card"><span class="metric-label">Registros Recibidos en Buzones</span><strong>{{ monitor.get("received_total", 0)|formato_miles }}</strong><span class="metric-foot">{{ monitor.get("pending_total", 0)|formato_miles }} pendientes · {{ monitor.get("processed_total", 0)|formato_miles }} procesados</span></article>
+    <article class="metric-card"><span class="metric-label">Registros Limpiados / Homologados</span><strong>{{ monitor.get("cleaned_total", 0)|formato_miles }}</strong><span class="metric-foot">Según el historial de corridas</span></article>
+    <article class="metric-card"><span class="metric-label">Registros Mandados al Data Warehouse</span><strong>{{ monitor.get("loaded_total", 0)|formato_miles }}</strong><span class="metric-foot">Inserciones únicas registradas</span></article>
+  </section>
+  <section class="panel data-panel">
+    <div class="panel-heading"><div><p class="eyebrow">GRUPOS 1–4</p><h2>Desglose por buzón</h2></div><span class="badge badge-neutral">sisg_analitica → sisg_dw</span></div>
+    {% set monitor_groups = monitor.get("groups", []) %}
+    {% if monitor_groups %}
+    <div class="table-wrap"><table><thead><tr><th>Grupo</th><th>Buzón</th><th>Recibidos</th><th>Pendientes</th><th>Procesados</th><th>Mandados al DW</th><th>Destino</th></tr></thead><tbody>
+      {% for row in monitor_groups %}<tr><td>Grupo {{ "%02d"|format(row.group_id) }} · {{ row.group_name }}</td><td>{{ row.inbox }}</td><td>{{ row.received|formato_miles }}</td><td>{{ row.pending|formato_miles }}</td><td>{{ row.processed|formato_miles }}</td><td>{{ row.sent|formato_miles }}</td><td>{{ row.target }}</td></tr>{% endfor %}
     </tbody></table></div>
-  {% else %}
-    <div class="empty-state"><strong>Sin registros disponibles</strong><p>La tabla de metadatos no está disponible o aún no hay ejecuciones de ingesta.</p></div>
-  {% endif %}
+    {% else %}
+    <div class="empty-state"><strong>Sin datos de buzones</strong><p>No se pudo obtener el desglose del flujo de ingesta.</p></div>
+    {% endif %}
+  </section>
+  <section class="panel central-chart-panel">
+    <div class="panel-heading"><div><p class="eyebrow">COMPARATIVO POR GRUPO</p><h2>Recibidos en buzón vs. enviados al DW</h2></div><span class="badge badge-neutral">Registros</span></div>
+    <div class="chart-canvas"><canvas data-chart="etl-monitor" aria-label="Comparativo de registros recibidos y enviados por grupo"></canvas></div>
+  </section>
 </section>
-<section class="panel pipeline-note">
-  <div class="pipeline-symbol">ETL</div>
-  <div><h2>Pipeline de integración</h2><p>El proceso extrae el archivo de ejemplo de <code>data_entrada/</code>, estandariza los datos y registra la carga en el esquema central.</p></div>
-  <span class="badge badge-success">Preparado</span>
-</section>
+{% endif %}
 {% endblock %}
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script type="application/json" id="central-chart-data">{{ data.get("activity_chart", {"labels": [], "values": []})|tojson }}</script>
+{% if current_group_id == 8 %}
+<script type="application/json" id="etl-monitor-chart-data">{{ data.get("etl_monitor", {}).get("chart", {"labels": [], "received": [], "sent": []})|tojson }}</script>
+{% endif %}
 {% endblock %}
