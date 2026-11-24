@@ -59,7 +59,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       {% for field in form.get("fields", []) %}
         <div class="ingestion-field">
-          <label for="field-{{ field.name }}">{{ field.name|replace("_", " ")|title }} <span class="required-mark">*</span></label>
+          <label for="field-{{ field.name }}">{{ field.get("label", field.name|replace("_", " ")|title) }} <span class="required-mark">*</span></label>
           {% if form.get("field_catalogs", {}).get(field.name) %}
             <select id="field-{{ field.name }}" name="{{ field.name }}" required>
               <option value="">Selecciona una opción</option>
@@ -68,7 +68,7 @@
               {% endfor %}
             </select>
           {% else %}
-            <input id="field-{{ field.name }}" name="{{ field.name }}" {% if field.data_type in ["int", "bigint", "decimal", "float", "double"] %}inputmode="decimal"{% endif %} required>
+            <input id="field-{{ field.name }}" name="{{ field.name }}" {% if field.name == "dias_estancia" %}type="number" min="0" step="1"{% elif field.data_type in ["int", "bigint", "decimal", "float", "double"] %}inputmode="decimal"{% endif %} required>
           {% endif %}
         </div>
       {% endfor %}

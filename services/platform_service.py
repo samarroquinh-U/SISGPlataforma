@@ -20,6 +20,7 @@ from database.queries import (
     fetch_count,
     fetch_rows,
     fetch_table_columns,
+    fetch_time_periods,
     insert_inbox_row,
 )
 from etl.extract import ANALYTICS_SCHEMA, INBOXES
@@ -60,6 +61,20 @@ CATALOG_INPUT_KEYS = {
     ("diagnostico", "codigo"): ("codigo_cie10", "cie10", "codigo_diagnostico"),
     ("tiempo", "fecha"): ("fecha", "fecha_calendario", "fecha_completa"),
 }
+SPANISH_MONTHS = (
+    "Enero",
+    "Febrero",
+    "Marzo",
+    "Abril",
+    "Mayo",
+    "Junio",
+    "Julio",
+    "Agosto",
+    "Septiembre",
+    "Octubre",
+    "Noviembre",
+    "Diciembre",
+)
 
 
 def connection_status(group_id: int) -> dict:
@@ -343,6 +358,32 @@ def _period_sort_key(label: str) -> tuple[int, int, str]:
     return (year, month, label)
 
 
+def _canonical_period(label: str) -> tuple[str, str]:
+    year, month, _ = _period_sort_key(label)
+    if year != 9999 and 1 <= month <= 12:
+        month_names = (
+            "Enero",
+            "Febrero",
+            "Marzo",
+            "Abril",
+            "Mayo",
+            "Junio",
+            "Julio",
+            "Agosto",
+            "Septiembre",
+            "Octubre",
+            "Noviembre",
+            "Diciembre",
+        )
+        return f"{year:04d}-{month:02d}", f"{month_names[month - 1]} {year}"
+    normalized = " ".join(label.split())
+    comparison = normalize("NFKD", normalized.lower())
+    comparison = "".join(
+        char for char in comparison if not combining(char)
+    )
+    return comparison, normalized
+
+
 def _build_charts(records: list[dict], group: dict) -> dict:
     metric_column = _find_column(
         records, (*METRIC_CANDIDATES[group["metric"]], group["metric_label"])
@@ -353,14 +394,23 @@ def _build_charts(records: list[dict], group: dict) -> dict:
          "Diagnóstico CIE-10", "Servicio", "Evento"),
     )
     monthly_values = defaultdict(float)
+    monthly_labels = {}
     category_values = defaultdict(float)
     for row in records:
         amount = _as_number(row.get(metric_column)) if metric_column else None
         amount = amount if amount is not None else 1
-        monthly_values[_period_label(row)] += amount
+        period_key, period_label = _canonical_period(_period_label(row))
+        monthly_values[period_key] += amount
+        monthly_labels.setdefault(period_key, period_label)
         category = row.get(category_column) if category_column else None
         category_values[str(category or "No especificado")] += amount
-    monthly_items = sorted(monthly_values.items(), key=lambda item: _period_sort_key(item[0]))
+    monthly_items = sorted(
+        (
+            (monthly_labels[key], value)
+            for key, value in monthly_values.items()
+        ),
+        key=lambda item: _period_sort_key(item[0]),
+    )
     return {
         "monthly": {
             "labels": [label for label, _ in monthly_items],
@@ -558,8 +608,13 @@ def ingestion_form(group_id: int) -> dict:
             field
             for field in fields
             if field["extra"] != "auto_increment"
-            and field["default_value"] is None
-            and field["nullable"] == "NO"
+            and (
+                (
+                    field["default_value"] is None
+                    and field["nullable"] == "NO"
+                )
+                or field["name"] in group.get("form_required_fields", ())
+            )
         ]
         catalogs = {}
         for catalog_name in group.get("catalogs", ()):
@@ -603,11 +658,59 @@ def ingestion_form(group_id: int) -> dict:
                 if options:
                     field_catalogs[field["name"]] = options
                     break
+        if group.get("period_input") == "month_year":
+            time_field = next(
+                (field for field in editable_fields if field["name"] == "sk_tiempo"),
+                None,
+            )
+            if time_field is None:
+                raise RuntimeError(
+                    "El formulario mensual requiere la columna sk_tiempo."
+                )
+            periods = fetch_time_periods(
+                connection, CATALOG_VIEWS["tiempo"]["view"]
+            )
+            if not periods:
+                raise RuntimeError("El catálogo de tiempo no contiene períodos.")
+            years = sorted(
+                {int(period["year"]) for period in periods}
+            )
+            time_position = editable_fields.index(time_field)
+            editable_fields.remove(time_field)
+            field_catalogs.pop("sk_tiempo", None)
+            editable_fields[time_position:time_position] = [
+                {"name": "_period_month", "data_type": "int", "label": "Mes"},
+                {"name": "_period_year", "data_type": "int", "label": "Año"},
+            ]
+            field_catalogs["_period_month"] = [
+                {"value": month, "label": label}
+                for month, label in enumerate(SPANISH_MONTHS, start=1)
+            ]
+            field_catalogs["_period_year"] = [
+                {"value": year, "label": year} for year in years
+            ]
     return {
         "fields": editable_fields,
         "catalogs": catalogs,
         "field_catalogs": field_catalogs,
     }
+
+
+def _resolve_time_surrogate(periods: list[dict], month: int, year: int) -> int:
+    matches = [
+        period
+        for period in periods
+        if int(period["month"]) == month and int(period["year"]) == year
+    ]
+    if not matches:
+        raise ValueError(
+            f"No existe el período seleccionado para {month:02d}/{year}."
+        )
+    if len(matches) > 1:
+        raise RuntimeError(
+            f"El catálogo de tiempo tiene más de una clave para {month:02d}/{year}."
+        )
+    return int(matches[0]["value"])
 
 
 def _catalog_value_candidates(
@@ -628,6 +731,35 @@ def submit_ingestion(group_id: int, submitted: dict) -> None:
     engine = get_engine(group_id)
     with engine.begin() as connection:
         metadata = fetch_table_columns(connection, validate_identifier(group["inbox"]))
+        submitted_values = dict(submitted)
+        if group.get("period_input") == "month_year":
+            try:
+                month = int(submitted_values.pop("_period_month", ""))
+                year = int(submitted_values.pop("_period_year", ""))
+            except (TypeError, ValueError) as error:
+                raise ValueError("Selecciona un mes y un año válidos.") from error
+            if not 1 <= month <= 12:
+                raise ValueError("Selecciona un mes válido.")
+            periods = fetch_time_periods(
+                connection, CATALOG_VIEWS["tiempo"]["view"]
+            )
+            submitted_values["sk_tiempo"] = _resolve_time_surrogate(
+                periods, month, year
+            )
+
+        if "dias_estancia" in group.get("form_required_fields", ()):
+            try:
+                days = int(submitted_values.get("dias_estancia", ""))
+            except (TypeError, ValueError) as error:
+                raise ValueError(
+                    "Ingresa los días de estancia como un entero no negativo."
+                ) from error
+            if days < 0:
+                raise ValueError(
+                    "Los días de estancia deben ser un entero no negativo."
+                )
+            submitted_values["dias_estancia"] = days
+
         required = {
             field["name"]
             for field in metadata
@@ -635,11 +767,18 @@ def submit_ingestion(group_id: int, submitted: dict) -> None:
             and field["default_value"] is None
             and field["nullable"] == "NO"
         }
+        required.update(group.get("form_required_fields", ()))
         allowed_columns = {field["name"] for field in metadata}
         values = {
-            key: value for key, value in submitted.items() if key in allowed_columns
+            key: value
+            for key, value in submitted_values.items()
+            if key in allowed_columns
         }
-        missing = [name for name in required if not values.get(name)]
+        missing = [
+            name
+            for name in required
+            if name not in values or values[name] in (None, "")
+        ]
         if missing:
             raise ValueError("Completa los campos obligatorios.")
         if not values:

@@ -10,11 +10,23 @@ from app import (
     formato_miles,
     formato_quetzal,
 )
-from database.queries import fetch_rows
+from config.groups_config import GROUPS
+from database.queries import (
+    fetch_catalog_options,
+    fetch_rows,
+    fetch_time_periods,
+)
 from etl.load import load_inbox_batch
 from etl.pipeline import _build_cost_frame
 from etl.transform import transform_records
-from services.platform_service import _build_charts, _period_label, _present_records
+from services.platform_service import (
+    _build_charts,
+    _period_label,
+    _present_records,
+    _resolve_time_surrogate,
+    ingestion_form,
+    submit_ingestion,
+)
 
 
 class FakeResult:
@@ -34,7 +46,7 @@ class FakeResult:
 class CatalogQueryConnection:
     columns = {
         "vw_group": ["sk_tiempo", "sk_geografia"],
-        "vw_cat_tiempo": ["sk_tiempo", "nombre_mes", "anio"],
+        "vw_cat_tiempo": ["sk_tiempo", "mes", "nombre_mes", "anio"],
         "vw_cat_geografia": [
             "sk_geografia",
             "nombre_municipio",
@@ -308,6 +320,21 @@ class PlatformTests(unittest.TestCase):
         )
         self.assertEqual(_period_label({"Periodo": "2024-01-01"}), "Enero 2024")
 
+    def test_monthly_chart_merges_period_label_variations(self):
+        charts = _build_charts(
+            [
+                {"Periodo": "ABRIL 2024", "Atenciones": 3, "Establecimiento": "A"},
+                {"Periodo": "  Abril 2024 ", "Atenciones": 2, "Establecimiento": "B"},
+            ],
+            {
+                "metric": "atenciones",
+                "metric_label": "Atenciones",
+                "category": "Establecimiento",
+            },
+        )
+        self.assertEqual(charts["monthly"]["labels"], ["Abril 2024"])
+        self.assertEqual(charts["monthly"]["values"], [5])
+
     def test_dashboard_query_joins_catalogs_for_descriptive_names(self):
         connection = CatalogQueryConnection()
         fetch_rows(connection, "vw_group", ("tiempo", "geografia"))
@@ -316,6 +343,150 @@ class PlatformTests(unittest.TestCase):
         self.assertIn("CONCAT(", connection.dashboard_query)
         self.assertIn("CONCAT_WS(' / '", connection.dashboard_query)
         self.assertIn("`__label_geografia`", connection.dashboard_query)
+
+    def test_catalog_options_disambiguate_time_and_geography_labels(self):
+        connection = CatalogQueryConnection()
+        fetch_catalog_options(connection, "vw_cat_tiempo")
+        self.assertIn("SELECT DISTINCT", connection.dashboard_query)
+        self.assertIn("CONCAT(", connection.dashboard_query)
+        self.assertIn("`anio`", connection.dashboard_query)
+
+        fetch_catalog_options(connection, "vw_cat_geografia")
+        self.assertIn("SELECT DISTINCT", connection.dashboard_query)
+        self.assertIn("CONCAT_WS(' / '", connection.dashboard_query)
+        self.assertIn("`nombre_municipio`", connection.dashboard_query)
+        self.assertIn("`nombre_departamento`", connection.dashboard_query)
+
+    def test_time_period_query_reads_month_year_and_surrogate_key(self):
+        connection = CatalogQueryConnection()
+        fetch_time_periods(connection, "vw_cat_tiempo")
+        self.assertIn("SELECT DISTINCT", connection.dashboard_query)
+        self.assertIn("`sk_tiempo` AS value", connection.dashboard_query)
+        self.assertIn("`mes` AS month", connection.dashboard_query)
+        self.assertIn("`anio` AS year", connection.dashboard_query)
+
+    def test_group_3_has_demography_catalog_for_ingestion(self):
+        self.assertIn("demografia", GROUPS[3]["catalogs"])
+
+    def test_group_3_form_uses_month_and_year_lists_and_includes_stay_days(self):
+        fields = [
+            {
+                "name": "id_ingesta",
+                "data_type": "bigint",
+                "nullable": "NO",
+                "default_value": None,
+                "extra": "auto_increment",
+            },
+            {
+                "name": "sk_tiempo",
+                "data_type": "int",
+                "nullable": "NO",
+                "default_value": None,
+                "extra": "",
+            },
+            {
+                "name": "dias_estancia",
+                "data_type": "int",
+                "nullable": "NO",
+                "default_value": "0",
+                "extra": "",
+            },
+        ]
+        with (
+            patch("services.platform_service.get_engine"),
+            patch("services.platform_service.fetch_table_columns", return_value=fields),
+            patch("services.platform_service.fetch_catalog_options", return_value=[]),
+            patch(
+                "services.platform_service.fetch_time_periods",
+                return_value=[
+                    {"value": 202604, "month": 4, "year": 2026},
+                    {"value": 202605, "month": 5, "year": 2026},
+                ],
+            ),
+        ):
+            form = ingestion_form(3)
+
+        self.assertEqual(
+            [field["name"] for field in form["fields"]],
+            ["_period_month", "_period_year", "dias_estancia"],
+        )
+        self.assertEqual(len(form["field_catalogs"]["_period_month"]), 12)
+        self.assertEqual(
+            form["field_catalogs"]["_period_month"][3],
+            {"value": 4, "label": "Abril"},
+        )
+        self.assertEqual(
+            form["field_catalogs"]["_period_year"],
+            [{"value": 2026, "label": 2026}],
+        )
+
+    def test_time_selection_resolves_one_month_year_key(self):
+        periods = [
+            {"value": 202604, "month": 4, "year": 2026},
+            {"value": 202605, "month": 5, "year": 2026},
+        ]
+        self.assertEqual(_resolve_time_surrogate(periods, 4, 2026), 202604)
+        with self.assertRaisesRegex(ValueError, "No existe el período"):
+            _resolve_time_surrogate(periods, 6, 2026)
+        with self.assertRaisesRegex(RuntimeError, "más de una clave"):
+            _resolve_time_surrogate(
+                periods + [{"value": 20260415, "month": 4, "year": 2026}],
+                4,
+                2026,
+            )
+
+    def test_group_3_submission_stores_time_key_and_integer_stay_days(self):
+        fields = [
+            {
+                "name": name,
+                "data_type": "int",
+                "nullable": "NO",
+                "default_value": "0" if name == "dias_estancia" else None,
+                "extra": "",
+            }
+            for name in (
+                "sk_tiempo",
+                "sk_establecimiento",
+                "sk_geografia",
+                "sk_servicio",
+                "sk_demografia",
+                "prestaciones",
+                "dias_estancia",
+            )
+        ]
+        submitted = {
+            "_period_month": "4",
+            "_period_year": "2026",
+            "sk_establecimiento": "11",
+            "sk_geografia": "12",
+            "sk_servicio": "13",
+            "sk_demografia": "14",
+            "prestaciones": "25",
+            "dias_estancia": "0",
+        }
+        with (
+            patch("services.platform_service.get_engine"),
+            patch(
+                "services.platform_service.fetch_table_columns",
+                return_value=fields,
+            ),
+            patch(
+                "services.platform_service.fetch_time_periods",
+                return_value=[
+                    {"value": 202604, "month": 4, "year": 2026}
+                ],
+            ),
+            patch("services.platform_service.insert_inbox_row") as insert_row,
+        ):
+            submit_ingestion(3, submitted)
+            submitted["dias_estancia"] = "-1"
+            with self.assertRaisesRegex(ValueError, "no negativo"):
+                submit_ingestion(3, submitted)
+
+        values = insert_row.call_args.args[3]
+        self.assertEqual(values["sk_tiempo"], 202604)
+        self.assertEqual(values["dias_estancia"], 0)
+        insert_row.assert_called_once()
 
     def test_group_dashboard_renders_analytics_and_detail_tabs(self):
         group_data = {

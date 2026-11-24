@@ -110,15 +110,16 @@ def fetch_rows(connection, view_name: str, catalog_names: tuple[str, ...] = ()):
             year_column = _matching_column(
                 catalog_columns, ("anio", "ano", "year")
             )
-            if (
-                year_column
-                and label_column.lower()
-                not in ("nombre_periodo", "periodo", "fecha")
-            ):
+            if year_column:
                 year_column = validate_identifier(year_column)
+                year_expression = (
+                    f"CAST(`{alias}`.`{year_column}` AS CHAR)"
+                )
                 label_expression = (
-                    f"CONCAT({label_expression}, ' ', "
-                    f"CAST(`{alias}`.`{year_column}` AS CHAR))"
+                    f"CASE WHEN LOCATE({year_expression}, "
+                    f"{label_expression}) > 0 THEN {label_expression} "
+                    f"ELSE CONCAT({label_expression}, ' ', "
+                    f"{year_expression}) END"
                 )
         elif catalog_name == "geografia":
             municipality_column = _matching_column(
@@ -224,12 +225,17 @@ def fetch_catalog_options(
     columns = _column_metadata(connection, safe_view)
     if not columns:
         return []
-    catalog = next(
-        (metadata for metadata in CATALOG_VIEWS.values() if metadata["view"] == safe_view),
+    catalog_match = next(
+        (
+            (name, metadata)
+            for name, metadata in CATALOG_VIEWS.items()
+            if metadata["view"] == safe_view
+        ),
         None,
     )
-    if not catalog:
+    if not catalog_match:
         raise ValueError(f"Catálogo no configurado: {safe_view}")
+    catalog_name, catalog = catalog_match
     key_column = (
         _matching_column(columns, value_candidates)
         if value_candidates
@@ -240,12 +246,68 @@ def fetch_catalog_options(
         return []
     key_column = validate_identifier(key_column)
     label_column = validate_identifier(label_column)
+    label_expression = f"CAST(`{label_column}` AS CHAR)"
+    if catalog_name == "tiempo":
+        year_column = _matching_column(columns, ("anio", "ano", "year"))
+        if year_column:
+            year_column = validate_identifier(year_column)
+            year_expression = f"CAST(`{year_column}` AS CHAR)"
+            label_expression = (
+                f"CASE WHEN LOCATE({year_expression}, {label_expression}) > 0 "
+                f"THEN {label_expression} ELSE CONCAT({label_expression}, ' ', "
+                f"{year_expression}) END"
+            )
+    elif catalog_name == "geografia":
+        municipality_column = _matching_column(
+            columns, ("nombre_municipio", "municipio")
+        )
+        department_column = _matching_column(
+            columns, ("nombre_departamento", "departamento")
+        )
+        if (
+            municipality_column
+            and department_column
+            and label_column.lower() != "municipio_departamento"
+        ):
+            municipality_column = validate_identifier(municipality_column)
+            department_column = validate_identifier(department_column)
+            label_expression = (
+                "CONCAT_WS(' / ', NULLIF(CAST(`"
+                f"{municipality_column}` AS CHAR), ''), "
+                f"NULLIF(CAST(`{department_column}` AS CHAR), ''))"
+            )
     result = connection.execute(
         text(
-            f"SELECT `{key_column}` AS value, `{label_column}` AS label "
-            f"FROM `{safe_view}` ORDER BY `{label_column}` LIMIT :row_limit"
+            f"SELECT DISTINCT `{key_column}` AS value, "
+            f"COALESCE(NULLIF({label_expression}, ''), 'No especificado') AS label "
+            f"FROM `{safe_view}` ORDER BY label, value LIMIT :row_limit"
         ),
         {"row_limit": limit},
+    )
+    return [dict(row) for row in result.mappings()]
+
+
+def fetch_time_periods(connection, view_name: str) -> list[dict]:
+    """Devuelve claves de tiempo asociadas a mes y año."""
+    safe_view = validate_identifier(view_name)
+    columns = _column_metadata(connection, safe_view)
+    key_column = _matching_column(columns, ("sk_tiempo", "id_tiempo", "id"))
+    month_column = _matching_column(columns, ("mes", "month", "num_mes"))
+    year_column = _matching_column(columns, ("anio", "ano", "year"))
+    if not key_column or not month_column or not year_column:
+        raise RuntimeError(
+            f"El catálogo de tiempo {safe_view} debe incluir clave, mes y año."
+        )
+    key_column = validate_identifier(key_column)
+    month_column = validate_identifier(month_column)
+    year_column = validate_identifier(year_column)
+    result = connection.execute(
+        text(
+            f"SELECT DISTINCT `{key_column}` AS value, "
+            f"`{month_column}` AS month, `{year_column}` AS year "
+            f"FROM `{safe_view}` "
+            f"ORDER BY `{year_column}`, `{month_column}`, `{key_column}`"
+        )
     )
     return [dict(row) for row in result.mappings()]
 
